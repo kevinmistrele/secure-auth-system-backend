@@ -9,6 +9,7 @@ import {
 } from '../controllers/authController'
 import { verifyToken, isAdmin } from '../middlewares/authMiddleware'
 import {getUsers} from "../controllers/userController";
+import {getLogs} from "../controllers/logController";
 
 const router = Router()
 
@@ -18,6 +19,7 @@ router.post('/login', loginUser)
 router.post('/request-password-reset', requestPasswordReset);
 router.post('/reset-password', resetPassword);
 
+router.get('/logs', getLogs, isAdmin);
 router.get("/users", verifyToken, isAdmin, getUsers);
 
 router.put('/users/:id', verifyToken, updateUser);

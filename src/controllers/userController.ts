@@ -6,6 +6,6 @@ export const getUsers = async (req: Request, res: Response) => {
         const users = await User.find(); // Busca todos os usuários no banco
         res.json(users); // Retorna os usuários encontrados
     } catch (err) {
-        res.status(500).json({ error: "Erro ao buscar usuários" });
+        res.status(500).json({ error: "Error loading users" });
     }
 };

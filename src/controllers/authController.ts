@@ -1,78 +1,85 @@
-import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
-import { Request, Response, RequestHandler  } from 'express'
-import {User} from "../models/User";
-import {generateResetToken, verifyResetToken} from "../utils/tokenUtils";
-import {sendResetPasswordEmail} from "../services/emailService";
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { Request, Response } from 'express';
+import { User } from "../models/User";
+import { generateResetToken, verifyResetToken } from "../utils/tokenUtils";
+import { sendResetPasswordEmail } from "../services/emailService";
+import { addLog } from '../services/logService';
 
-const users: { id: number, name: string, email: string, password: string, role: string }[] = []
+const users: { id: number, name: string, email: string, password: string, role: string }[] = [];
 
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
-    const { name, email, password } = req.body
-    const existing = await User.findOne({ email })
+    const { name, email, password } = req.body;
+    const existing = await User.findOne({ email });
     if (existing) {
-        res.status(400).json({ error: 'Email já cadastrado' })
-        return
+        res.status(400).json({ error: 'Email já cadastrado' });
+        return;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
-    const user = new User({ name, email, password: hashedPassword })
-    await user.save()
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ name, email, password: hashedPassword });
+    await user.save();
 
-    res.status(201).json({ message: 'Usuário registrado com sucesso' })
-}
+    await addLog('Register User', name, `User registered with email ${email}`);
+
+    res.status(201).json({ message: 'Usuário registrado com sucesso' });
+};
 
 export const registerAdmin = async (req: Request, res: Response): Promise<void> => {
-    const { name, email, password } = req.body
-    const existing = await User.findOne({ email })
+    const { name, email, password } = req.body;
+    const existing = await User.findOne({ email });
     if (existing) {
-        res.status(400).json({ error: 'Email já cadastrado' })
-        return
+        res.status(400).json({ error: 'Email já cadastrado' });
+        return;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
-    const user = new User({ name, email, password: hashedPassword, role: 'admin' })
-    await user.save()
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ name, email, password: hashedPassword, role: 'admin' });
+    await user.save();
 
-    res.status(201).json({ message: 'Administrador registrado com sucesso' })
-}
+    await addLog('Register Admin', name, `Admin registered with email ${email}`);
+
+    res.status(201).json({ message: 'Administrador registrado com sucesso' });
+};
 
 export const loginUser = async (req: Request, res: Response): Promise<void> => {
-    const { email, password } = req.body
-    const user = await User.findOne({ email })
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
     if (!user) {
-        res.status(404).json({ error: 'Usuário não encontrado' })
-        return
+        await addLog('Failed Login', 'Unknown', `Login attempt with email ${email}`);
+        res.status(404).json({ error: 'Usuário não encontrado' });
+        return;
     }
 
-    const match = await bcrypt.compare(password, user.password)
+    const match = await bcrypt.compare(password, user.password);
     if (!match) {
-        res.status(401).json({ error: 'Senha incorreta' })
-        return
+        await addLog('Register User', 'New User', `User registered with email ${email}`);
+        res.status(401).json({ error: 'Senha incorreta' });
+        return;
     }
 
-    const token = jwt.sign({ id: user.id, role: user.role.toLowerCase() }, process.env.JWT_SECRET!, { expiresIn: '1h' })
-    res.json({ token, role: user.role.toLowerCase(), fullName: user.name, email: user.email, id: user.id })
-}
+    const token = jwt.sign({ id: user.id, role: user.role.toLowerCase() }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+
+    await addLog('Login', user.name, 'Login successful');
+
+    res.json({ token, role: user.role.toLowerCase(), fullName: user.name, email: user.email, id: user.id });
+};
 
 export const updateUser = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params; // Recebe o id do usuário a ser atualizado
-    const { fullName, role } = req.body; // Recebe o novo nome e, opcionalmente, o novo role
+    const { id } = req.params;
+    const { fullName, role } = req.body;
 
     try {
-        // Verifica se o usuário existe
         const user = await User.findById(id);
         if (!user) {
             res.status(404).json({ error: 'Usuário não encontrado' });
             return;
         }
 
-        // Atualiza o nome
         if (fullName) {
             user.name = fullName;
         }
 
-        // Atualiza o role somente se fornecido
         if (role) {
             if (role !== "user" && role !== "admin") {
                 res.status(400).json({ error: 'Role inválido. Apenas "user" ou "admin" são permitidos.' });
@@ -81,7 +88,9 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
             user.role = role;
         }
 
-        await user.save(); // Salva as atualizações no banco de dados
+        await user.save();
+
+        await addLog('Update User', user.name, `User updated. New name: ${user.name}, Role: ${user.role}`);
 
         res.status(200).json({
             message: 'Usuário atualizado com sucesso',
@@ -93,16 +102,17 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
 };
 
 export const deleteUser = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params; // Recebe o id do usuário a ser deletado
+    const { id } = req.params;
 
     try {
-        // Verifica se o usuário existe e deleta
         const user = await User.findByIdAndDelete(id);
 
         if (!user) {
             res.status(404).json({ error: 'Usuário não encontrado' });
             return;
         }
+
+        await addLog('Delete User', user.name, `User deleted: ${user.email}`);
 
         res.status(200).json({ message: 'Usuário excluído com sucesso' });
     } catch (error) {
@@ -126,6 +136,7 @@ export const requestPasswordReset = async (req: Request, res: Response): Promise
         const emailSent = await sendResetPasswordEmail(email, resetLink);
 
         if (emailSent) {
+            await addLog('Request Password Reset', user.name, 'Requested password reset');
             res.status(200).json({ success: true, message: 'Link de redefinição enviado para seu e-mail!' });
         } else {
             res.status(500).json({ success: false, error: 'Erro ao enviar o e-mail.' });
@@ -161,11 +172,11 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
         user.password = hashedPassword;
         await user.save();
 
+        await addLog('Reset Password', user.name, 'Password successfully reset');
+
         res.status(200).json({ success: true, message: 'Senha atualizada com sucesso.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, error: 'Erro ao processar a redefinição de senha.' });
     }
 };
-
-
