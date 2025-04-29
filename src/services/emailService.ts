@@ -18,9 +18,9 @@ export const sendResetPasswordEmail = async (email: string, resetLink: string): 
 
     try {
         await transporter.sendMail(mailOptions);
-        return true; // Retorna true se o e-mail for enviado com sucesso
+        return true;
     } catch (error) {
         console.error('Error sending email:', error);
-        return false; // Retorna false em caso de erro
+        return false;
     }
 };
