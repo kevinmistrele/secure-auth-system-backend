@@ -152,7 +152,13 @@ export class InvitationsService {
       `${user.email} joined as ${invitation.role}`,
     );
 
-    return this.authService.createSession(membership.user, membership);
+    // The session must list every organization, not only the one just joined.
+    const memberships = await this.prisma.membership.findMany({
+      where: { userId: user.userId },
+      include: { organization: true, user: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return this.authService.createSession(membership.user, membership, memberships);
   }
 
   private toSummary({ tokenHash: _tokenHash, ...rest }: Invitation): InvitationSummary {

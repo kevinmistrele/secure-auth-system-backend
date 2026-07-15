@@ -114,6 +114,8 @@ describe('Multi-tenant isolation (e2e)', () => {
       carolInOrgA = res.body as SessionBody;
       expect(carolInOrgA.organization.id).toBe(alice.organization.id);
       expect(carolInOrgA.role).toBe('MEMBER');
+      // The session lists ALL memberships (personal org + the joined one).
+      expect(carolInOrgA.organizations).toHaveLength(2);
     });
 
     it('rejects accepting the same invitation twice', async () => {
