@@ -1,0 +1,105 @@
+// RLS policies live in prisma/migrations (SQL), not here — Prisma cannot express them.
+// See docs/architecture/tenancy-and-rls.md for which tables are tenant-scoped and why.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+/// Global identity — deliberately NOT tenant-scoped (one account, many organizations).
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  email         String         @unique
+  name          String
+  passwordHash  String         @map("password_hash")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// The tenant. Its id is what goes into the JWT `tenantId` claim and `app.current_tenant`.
+model Organization {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now()) @map("created_at")
+  memberships Membership[]
+  invitations Invitation[]
+  auditLogs   AuditLog[]
+
+  @@map("organizations")
+}
+
+/// user <-> organization <-> role. Tenant-scoped: RLS on organization_id.
+model Membership {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  role           Role         @default(MEMBER)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("memberships")
+}
+
+/// Auth plane only — opaque tokens stored hashed, rotated on every refresh, revocable.
+model RefreshToken {
+  id             String    @id @default(uuid()) @db.Uuid
+  tokenHash      String    @unique @map("token_hash")
+  userId         String    @map("user_id") @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  expiresAt      DateTime  @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// Admin invites an email into the organization. Tenant-scoped: RLS on organization_id.
+model Invitation {
+  id             String       @id @default(uuid()) @db.Uuid
+  email          String
+  organizationId String       @map("organization_id") @db.Uuid
+  role           Role         @default(MEMBER)
+  tokenHash      String       @unique @map("token_hash")
+  invitedById    String       @map("invited_by_id") @db.Uuid
+  expiresAt      DateTime     @map("expires_at")
+  acceptedAt     DateTime?    @map("accepted_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("invitations")
+}
+
+/// The tenant-scoped business table — proves RLS isolation end to end.
+model AuditLog {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  action         String
+  actorEmail     String       @map("actor_email")
+  details        String
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
