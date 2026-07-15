@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthenticatedUser } from '../common/types/authenticated-user';
@@ -11,6 +19,7 @@ import {
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SwitchTenantDto } from './dto/switch-tenant.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -58,6 +67,22 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<Omit<AuthSession, 'accessToken' | 'refreshToken'>> {
     return this.authService.me(user);
+  }
+
+  @Patch('me')
+  updateProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<{ id: string; name: string; email: string }> {
+    return this.authService.updateProfile(user, dto.name);
+  }
+
+  @Delete('me')
+  async deleteAccount(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{ message: string }> {
+    await this.authService.deleteAccount(user);
+    return { message: 'Account deleted' };
   }
 
   @Public()

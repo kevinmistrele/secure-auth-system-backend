@@ -188,6 +188,48 @@ export class AuthService {
     };
   }
 
+  async updateProfile(
+    current: AuthenticatedUser,
+    name: string,
+  ): Promise<{ id: string; name: string; email: string }> {
+    const user = await this.prisma.user.update({
+      where: { id: current.userId },
+      data: { name },
+    });
+    await this.auditService.log(
+      current.tenantId,
+      'user.update',
+      user.email,
+      `Profile name changed to "${name}"`,
+    );
+    return { id: user.id, name: user.name, email: user.email };
+  }
+
+  async deleteAccount(current: AuthenticatedUser): Promise<void> {
+    const ownedOrgs = await this.prisma.membership.findMany({
+      where: { userId: current.userId, role: Role.OWNER },
+      include: {
+        organization: { include: { _count: { select: { memberships: true } } } },
+      },
+    });
+    const orgWithMembers = ownedOrgs.find(
+      (m) => m.organization._count.memberships > 1,
+    );
+    if (orgWithMembers) {
+      throw new ForbiddenException(
+        `You own "${orgWithMembers.organization.name}", which still has other members. Remove them first.`,
+      );
+    }
+    await this.prisma.$transaction([
+      // Solo-owned organizations die with the account; memberships,
+      // invitations, audit logs and tokens go via ON DELETE CASCADE.
+      this.prisma.organization.deleteMany({
+        where: { id: { in: ownedOrgs.map((m) => m.organizationId) } },
+      }),
+      this.prisma.user.delete({ where: { id: current.userId } }),
+    ]);
+  }
+
   async requestPasswordReset(email: string): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase() },

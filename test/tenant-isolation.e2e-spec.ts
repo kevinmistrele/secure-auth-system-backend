@@ -251,6 +251,35 @@ describe('Multi-tenant isolation (e2e)', () => {
     });
   });
 
+  describe('profile', () => {
+    it('updates the current user name', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/api/auth/me')
+        .set('Authorization', `Bearer ${alice.accessToken}`)
+        .send({ name: 'Alice Updated' })
+        .expect(200);
+      expect((res.body as { name: string }).name).toBe('Alice Updated');
+    });
+
+    it('refuses to delete an account that owns an organization with other members', async () => {
+      await request(app.getHttpServer())
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${alice.accessToken}`)
+        .expect(403);
+    });
+
+    it('deletes an account together with its solo-owned organizations', async () => {
+      await request(app.getHttpServer())
+        .delete('/api/auth/me')
+        .set('Authorization', `Bearer ${carolInOrgA.accessToken}`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'carol@org-a.test', password })
+        .expect(401);
+    });
+  });
+
   describe('RLS at the database level (defense in depth)', () => {
     it('returns no foreign rows even for a query with no WHERE clause', async () => {
       const rows = await tenantPrisma.withTenant(

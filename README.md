@@ -123,6 +123,8 @@ npm run test:e2e    # the proof: tenant A cannot read tenant B (API + raw RLS)
 | POST | `/api/auth/logout` | public | Revoke a refresh token |
 | POST | `/api/auth/switch-tenant` | auth | New token pair for another organization you belong to |
 | GET | `/api/auth/me` | auth | Current user, organization, role, memberships |
+| PATCH | `/api/auth/me` | auth | Update the profile name |
+| DELETE | `/api/auth/me` | auth | Delete the account (solo-owned organizations included) |
 | POST | `/api/auth/request-password-reset` | public | Email a reset link |
 | POST | `/api/auth/reset-password` | public | Set a new password, revoke sessions |
 | POST | `/api/organizations` | auth | Create another organization (caller becomes OWNER) |
